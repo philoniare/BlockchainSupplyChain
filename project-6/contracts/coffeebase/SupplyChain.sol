@@ -7,10 +7,7 @@ import "../coffeeaccesscontrol/RetailerRole.sol";
 import "../coffeeaccesscontrol/ConsumerRole.sol";
 
 // Define a contract 'Supplychain'
-contract SupplyChain is RetailerRole, ConsumerRole {
-
-  // Define 'owner'
-  address owner;
+contract SupplyChain is RetailerRole, ConsumerRole, DistributorRole, FarmerRole, Ownable {
 
   // Define a variable called 'upc' for Universal Product Code (UPC)
   uint  upc;
@@ -68,12 +65,6 @@ contract SupplyChain is RetailerRole, ConsumerRole {
   event Shipped(uint upc);
   event Received(uint upc);
   event Purchased(uint upc);
-
-  // Define a modifer that checks to see if msg.sender == owner of the contract
-  modifier onlyOwner() {
-    require(msg.sender == owner);
-    _;
-  }
 
   // Define a modifer that verifies the Caller
   modifier verifyCaller (address _address) {
@@ -148,21 +139,19 @@ contract SupplyChain is RetailerRole, ConsumerRole {
   // and set 'sku' to 1
   // and set 'upc' to 1
   constructor() public payable {
-    owner = msg.sender;
     sku = 1;
     upc = 1;
   }
 
   // Define a function 'kill' if required
-  function kill() public {
-    if (msg.sender == owner) {
-      address payable payableOwner = address(uint160(owner));
-      selfdestruct(payableOwner);
-    }
+  function kill() public onlyOwner() {
+    address payable payableOwner = address(uint160(owner()));
+    selfdestruct(payableOwner);
   }
 
   // Define a function 'harvestItem' that allows a farmer to mark an item 'Harvested'
   function harvestItem(uint _upc, address _originFarmerID, string memory _originFarmName, string memory _originFarmInformation, string memory _originFarmLatitude, string memory  _originFarmLongitude, string memory _productNotes) public
+    onlyFarmer()
   {
     // Add the new item as part of Harvest
     items[_upc] = Item({
@@ -192,6 +181,7 @@ contract SupplyChain is RetailerRole, ConsumerRole {
   function processItem(uint _upc) public 
   // Call modifier to check if upc has passed previous supply chain stage
     harvested(_upc)
+    onlyFarmer()
   // Call modifier to verify caller of this function
     verifyCaller(items[_upc].originFarmerID)
   {
@@ -205,6 +195,7 @@ contract SupplyChain is RetailerRole, ConsumerRole {
   function packItem(uint _upc) public 
   // Call modifier to check if upc has passed previous supply chain stage
   processed(_upc)
+  onlyFarmer()
   // Call modifier to verify caller of this function
   verifyCaller(items[_upc].originFarmerID)
   {
@@ -216,9 +207,8 @@ contract SupplyChain is RetailerRole, ConsumerRole {
 
   // Define a function 'sellItem' that allows a farmer to mark an item 'ForSale'
   function sellItem(uint _upc, uint _price) public 
-  // Call modifier to check if upc has passed previous supply chain stage
     packed(_upc)
-  // Call modifier to verify caller of this function
+    onlyFarmer()
     verifyCaller(items[_upc].originFarmerID)
   {
     // Update the appropriate fields
@@ -232,11 +222,9 @@ contract SupplyChain is RetailerRole, ConsumerRole {
   // Use the above defined modifiers to check if the item is available for sale, if the buyer has paid enough, 
   // and any excess ether sent is refunded back to the buyer
   function buyItem(uint _upc) public payable 
-    // Call modifier to check if upc has passed previous supply chain stage
     forSale(_upc)
-    // Call modifer to check if buyer has paid enough
+    onlyDistributor()
     paidEnough(items[_upc].productPrice)
-    // Call modifer to send any excess ether back to buyer
     checkValue(_upc)
     {
       address buyer = msg.sender;
@@ -254,9 +242,8 @@ contract SupplyChain is RetailerRole, ConsumerRole {
   // Define a function 'shipItem' that allows the distributor to mark an item 'Shipped'
   // Use the above modifers to check if the item is sold
   function shipItem(uint _upc) public 
-    // Call modifier to check if upc has passed previous supply chain stage
     sold(_upc)
-    // Call modifier to verify caller of this function
+    onlyDistributor()
     verifyCaller(items[_upc].distributorID)
     {
     // Update the appropriate fields
@@ -269,9 +256,7 @@ contract SupplyChain is RetailerRole, ConsumerRole {
   // Define a function 'receiveItem' that allows the retailer to mark an item 'Received'
   // Use the above modifiers to check if the item is shipped
   function receiveItem(uint _upc) public 
-    // Call modifier to check if upc has passed previous supply chain stage
     shipped(_upc)
-    // Access Control List enforced by calling Smart Contract / DApp
     onlyRetailer()
     {
     // Update the appropriate fields - ownerID, retailerID, itemState
@@ -286,9 +271,7 @@ contract SupplyChain is RetailerRole, ConsumerRole {
   // Define a function 'purchaseItem' that allows the consumer to mark an item 'Purchased'
   // Use the above modifiers to check if the item is received
   function purchaseItem(uint _upc) public 
-    // Call modifier to check if upc has passed previous supply chain stage
     received(_upc)
-    // Access Control List enforced by calling Smart Contract / DApp
     onlyConsumer()
     {
     // Update the appropriate fields - ownerID, consumerID, itemState
